@@ -22,7 +22,9 @@ jobs:
       - name: Download modules
         run: go mod download
       - name: Format check
-        run: test -z "$(gofmt -l .)"
+        run: |
+          gofmt -w .
+          test -z "$(gofmt -l .)"
       - name: Build and help smoke test
         run: |
           go build -ldflags='-s -w -X main.version=ci' -o edgepulse main.go
