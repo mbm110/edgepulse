@@ -355,7 +355,7 @@ All terminal output is English only on every supported platform.
 
 ## Build and release
 
-Packages are built only by GitHub Actions. The workflow runs tests, checks that runtime files contain no CJK text, creates lightweight archives, and publishes assets when a `v*.*.*` tag is pushed.
+Packages are built only by GitHub Actions. The workflow runs tests, checks that runtime files contain no CJK text, creates native archives for Linux AMD64 and ARM64, Windows AMD64, and macOS AMD64 and ARM64, and publishes a portable source archive for any architecture with Python 3.10+. Assets are published when a `v*.*.*` tag is pushed.
 
 Local validation:
 
@@ -703,7 +703,7 @@ python3 edgepulse.py --file ip.txt
 
 ## Build و Release
 
-ساخت بسته‌ها فقط با GitHub Actions انجام می‌شود. Workflow تست‌ها را اجرا می‌کند، نبود متن CJK را در فایل‌های Runtime بررسی می‌کند، Archive سبک می‌سازد و با Push تگ `v*.*.*` Release را منتشر می‌کند.
+ساخت بسته‌ها فقط با GitHub Actions انجام می‌شود. Workflow تست‌ها را اجرا می‌کند و نبود متن CJK را در فایل‌های Runtime بررسی می‌کند. فایل‌های اجرایی مخصوص Linux AMD64 و ARM64، Windows AMD64 و macOS AMD64 و ARM64 ساخته می‌شوند. برای معماری‌های دیگر بسته Source قابل اجرا با Python 3.10 یا جدیدتر ارائه می‌شود. با Push تگ `v*.*.*` نسخه جدید منتشر می‌شود.
 
 تست محلی:
 

@@ -27,31 +27,82 @@ jobs:
 
   package:
     needs: verify
-    runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         include:
           - name: linux-amd64
+            runner: ubuntu-24.04
             archive: edgepulse-linux-amd64.tar.gz
-          - name: source
-            archive: edgepulse-source.tar.gz
+            binary: edgepulse
+          - name: linux-arm64
+            runner: ubuntu-24.04-arm
+            archive: edgepulse-linux-arm64.tar.gz
+            binary: edgepulse
+          - name: windows-amd64
+            runner: windows-latest
+            archive: edgepulse-windows-amd64.zip
+            binary: edgepulse.exe
+          - name: macos-amd64
+            runner: macos-13
+            archive: edgepulse-macos-amd64.tar.gz
+            binary: edgepulse
+          - name: macos-arm64
+            runner: macos-14
+            archive: edgepulse-macos-arm64.tar.gz
+            binary: edgepulse
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
-      - name: Create archive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install packager
+        run: python -m pip install --upgrade pyinstaller
+      - name: Build native executable
+        run: python -m PyInstaller --clean --onefile --name edgepulse edgepulse.py
+      - name: Package Unix binary
+        if: runner.os != 'Windows'
+        shell: bash
         run: |
+          set -euo pipefail
           mkdir -p staging/edgepulse-${{ matrix.name }}
-          cp edgepulse.py README.md LICENSE ip.txt EDGEPLUSE_LOGO.svg staging/edgepulse-${{ matrix.name }}/
-          cp -r tests staging/edgepulse-${{ matrix.name }}/
-          chmod +x staging/edgepulse-${{ matrix.name }}/edgepulse.py
+          cp dist/${{ matrix.binary }} staging/edgepulse-${{ matrix.name }}/
+          cp README.md LICENSE ip.txt EDGEPLUSE_LOGO.svg staging/edgepulse-${{ matrix.name }}/
           tar -czf '${{ matrix.archive }}' -C staging 'edgepulse-${{ matrix.name }}'
+      - name: Package Windows binary
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force staging/edgepulse-${{ matrix.name }} | Out-Null
+          Copy-Item dist/${{ matrix.binary }} staging/edgepulse-${{ matrix.name }}/
+          Copy-Item README.md,LICENSE,ip.txt,EDGEPLUSE_LOGO.svg staging/edgepulse-${{ matrix.name }}/
+          Compress-Archive -Path staging/edgepulse-${{ matrix.name }} -DestinationPath '${{ matrix.archive }}'
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}
           path: ${{ matrix.archive }}
 
+  source-package:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package portable source
+        run: |
+          set -euo pipefail
+          mkdir -p staging/edgepulse-source
+          cp edgepulse.py README.md LICENSE ip.txt EDGEPLUSE_LOGO.svg staging/edgepulse-source/
+          cp -r tests staging/edgepulse-source/
+          tar -czf edgepulse-source.tar.gz -C staging edgepulse-source
+      - uses: actions/upload-artifact@v4
+        with:
+          name: source
+          path: edgepulse-source.tar.gz
+
   release:
     if: startsWith(github.ref, 'refs/tags/')
-    needs: package
+    needs: [package, source-package]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v4
