@@ -1,0 +1,67 @@
+name: Release EdgePulse
+
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Run tests
+        run: python -m unittest discover -s tests -v
+      - name: Verify English runtime
+        shell: bash
+        run: |
+          python3 edgepulse.py --help > help.txt
+          ! grep -nP '[\x{4e00}-\x{9fff}]' help.txt
+          ! grep -RInP '[\x{4e00}-\x{9fff}]' --include='*.py' .
+
+  package:
+    needs: verify
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - name: linux-amd64
+            archive: edgepulse-linux-amd64.tar.gz
+          - name: source
+            archive: edgepulse-source.tar.gz
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create archive
+        run: |
+          mkdir -p staging/edgepulse-${{ matrix.name }}
+          cp edgepulse.py README.md LICENSE ip.txt EDGEPLUSE_LOGO.svg staging/edgepulse-${{ matrix.name }}/
+          cp -r tests staging/edgepulse-${{ matrix.name }}/
+          chmod +x staging/edgepulse-${{ matrix.name }}/edgepulse.py
+          tar -czf '${{ matrix.archive }}' -C staging 'edgepulse-${{ matrix.name }}'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: ${{ matrix.archive }}
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          body: |
+            EdgePulse is an independent English-only command-line network measurement utility.
+
+            This release was verified by the repository test suite and packaged by GitHub Actions.
+          files: dist/*
