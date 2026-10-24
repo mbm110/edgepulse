@@ -32,7 +32,7 @@ jobs:
           ! grep -nP '[\x{4e00}-\x{9fff}]' help.txt
           ! grep -RInP '[\x{4e00}-\x{9fff}]' --include='*.go' --include='*.sh' --include='*.bat' .
       - name: Check project identity
-        run: '! grep -RInE "XIU2|CloudflareSpeedTest|xiu2\\.xyz" --exclude=LICENSE --exclude-dir=.git .'
+        run: '! rg -n "XIU2|CloudflareSpeedTest|xiu2\\.xyz" --glob "!LICENSE" --glob "!.git/**" .'
 
   build:
     needs: verify
