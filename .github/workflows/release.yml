@@ -1,0 +1,145 @@
+name: Release EdgePulse
+
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  CGO_ENABLED: 0
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - name: Download modules
+        run: go mod download
+      - name: Format check
+        run: test -z "$(gofmt -l .)"
+      - name: Build and help smoke test
+        run: |
+          go build -ldflags='-s -w -X main.version=ci' -o edgepulse main.go
+          ./edgepulse -h > help.txt
+          ! grep -nP '[\x{4e00}-\x{9fff}]' help.txt
+          ! grep -RInP '[\x{4e00}-\x{9fff}]' --include='*.go' --include='*.sh' --include='*.bat' .
+      - name: Check project identity
+        run: '! grep -RInE "XIU2|CloudflareSpeedTest|xiu2\\.xyz" --exclude=LICENSE --exclude-dir=.git .'
+
+  build:
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            suffix: linux-amd64
+            archive: edgepulse-linux-amd64.tar.gz
+          - goos: linux
+            goarch: arm64
+            suffix: linux-arm64
+            archive: edgepulse-linux-arm64.tar.gz
+          - goos: linux
+            goarch: arm
+            goarm: '7'
+            suffix: linux-armv7
+            archive: edgepulse-linux-armv7.tar.gz
+          - goos: linux
+            goarch: '386'
+            suffix: linux-386
+            archive: edgepulse-linux-386.tar.gz
+          - goos: windows
+            goarch: amd64
+            suffix: windows-amd64
+            archive: edgepulse-windows-amd64.zip
+          - goos: windows
+            goarch: arm64
+            suffix: windows-arm64
+            archive: edgepulse-windows-arm64.zip
+          - goos: windows
+            goarch: '386'
+            suffix: windows-386
+            archive: edgepulse-windows-386.zip
+          - goos: darwin
+            goarch: amd64
+            suffix: macos-amd64
+            archive: edgepulse-macos-amd64.tar.gz
+          - goos: darwin
+            goarch: arm64
+            suffix: macos-arm64
+            archive: edgepulse-macos-arm64.tar.gz
+          - goos: freebsd
+            goarch: amd64
+            suffix: freebsd-amd64
+            archive: edgepulse-freebsd-amd64.tar.gz
+          - goos: freebsd
+            goarch: arm64
+            suffix: freebsd-arm64
+            archive: edgepulse-freebsd-arm64.tar.gz
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - name: Build static binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          GOARM: ${{ matrix.goarm }}
+        run: |
+          set -euo pipefail
+          mkdir -p staging/edgepulse-${{ matrix.suffix }}
+          output='staging/edgepulse-${{ matrix.suffix }}/edgepulse'
+          if [ '${{ matrix.goos }}' = windows ]; then output="${output}.exe"; fi
+          go build -trimpath -ldflags='-s -w -X main.version=${GITHUB_REF_NAME}' -o "$output" main.go
+          cp README.md README.fa.md LICENSE ip.txt ipv6.txt staging/edgepulse-${{ matrix.suffix }}/
+          cp -r script staging/edgepulse-${{ matrix.suffix }}/
+          if [[ '${{ matrix.archive }}' == *.zip ]]; then
+            (cd staging && zip -qr "../${{ matrix.archive }}" "edgepulse-${{ matrix.suffix }}")
+          else
+            tar -czf '${{ matrix.archive }}' -C staging "edgepulse-${{ matrix.suffix }}"
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.suffix }}
+          path: ${{ matrix.archive }}
+
+  source:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package source
+        run: |
+          mkdir -p staging/edgepulse-source
+          cp -r .gitattributes .gitignore go.mod go.sum main.go task utils script ip.txt ipv6.txt README.md README.fa.md LICENSE staging/edgepulse-source/
+          tar -czf edgepulse-source.tar.gz -C staging edgepulse-source
+      - uses: actions/upload-artifact@v4
+        with:
+          name: source
+          path: edgepulse-source.tar.gz
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [build, source]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          body: |
+            EdgePulse is a Go-based IPv4 and IPv6 CDN IP scanner and latency/speed tester.
+
+            This release includes statically linked Linux ARM64 assets built with CGO_ENABLED=0 for compatible Termux/Linux environments, plus binaries for other supported architectures.
+          files: dist/*
